@@ -95,6 +95,11 @@ public:
 		@return true if capacity successfully set.
 	*/
 	bool setCapacity(uint16_t capacity);
+	bool setFastQmaxCurrentThresh(uint16_t threshold);
+	bool setIntTempOffset(uint8_t int_temp_offset);
+	bool setBoardOffset(uint8_t board_offset);
+
+	void displayRegisters();
 	
 	/////////////////////////////
 	// Battery Characteristics //
@@ -308,6 +313,14 @@ public:
 		@return 16-bit representation of CONTROL_STATUS subcommand
 	*/
 	uint16_t status(void);
+
+	void printExtendedData(uint8_t classID);
+	// read Ra block
+	void readRaTable(void);
+	// read State
+	void readStateDataBlock(void);
+
+	bool loadSavedStatusRegisters();
 	
 private:
 	uint8_t _deviceAddress;  // Stores the BQ27441-G1A's I2C address
@@ -422,7 +435,7 @@ private:
 		@return true on success
 	*/
 	uint8_t readBlockData(uint8_t offset);
-	
+
 	/**
 	    Use BlockData() to write a byte to an offset of the loaded data
 		
@@ -456,7 +469,9 @@ private:
 		@return 8-bit value of specified data
 	*/
 	uint8_t readExtendedData(uint8_t classID, uint8_t offset);
-	
+
+	void readExtendedDataBytes(uint8_t classID, uint8_t offset, uint8_t * data, uint8_t size);
+
 	/**
 	    Write a specified number of bytes to extended data specifying a 
 		class ID, position offset.

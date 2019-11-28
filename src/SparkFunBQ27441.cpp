@@ -59,6 +59,52 @@ bool BQ27441::setCapacity(uint16_t capacity)
 	return writeExtendedData(BQ27441_ID_STATE, 10, capacityData, 2);
 }
 
+bool BQ27441::setFastQmaxCurrentThresh(uint16_t threshold)
+{
+	uint8_t capMSB = threshold >> 8;
+	uint8_t capLSB = threshold & 0x00FF;
+	uint8_t capacityData[2] = {capMSB, capLSB};
+	return writeExtendedData(BQ27441_ID_IT_CFG, 39, capacityData, 2);
+}
+
+bool BQ27441::setIntTempOffset(uint8_t int_temp_offset)
+{
+	return writeExtendedData(BQ27441_ID_CC_CAL, 1, &int_temp_offset, 1);
+}
+
+bool BQ27441::setBoardOffset(uint8_t board_offset)
+{
+	return writeExtendedData(BQ27441_ID_CALIB_DATA, 0, &board_offset, 1);
+}
+
+// Configures the design capacity of the connected battery.
+bool BQ27441::loadSavedStatusRegisters()
+{
+	// Write to STATE subclass (82) of BQ27441 extended memory.
+	// Offset 0x0A (10)
+	// Design capacity is a 2-byte piece of data - MSB first
+	uint8_t StateData1[] = {0x40,0x0,0x0,0x0,0x0,0x81,0xE,0xDB,0xE,0xA8,0x3,0xE8,0x13,0x60,0x5,0x3C,0xC,0x80,0x0,0xC8,0x0,0x32,0x0,0x14,0x3,0xE8,0x1,0x0,0x64,0x10,0x4,0x0};//0x40,0x0,0x0,0x0,0x0,0x81,0xE,0xDB,0xE};
+	uint8_t StateData2[] = {0x40,0x0,0x0,0x0,0x0,0x81,0xE,0xDB,0xE};
+	bool write1success = writeExtendedData(BQ27441_ID_STATE, 0, StateData1, 32);
+	if(write1success){
+		Serial.println("Load 1 success!");
+		delay(100);
+	}
+	else return false;
+	bool write2success = writeExtendedData(BQ27441_ID_STATE, 32, StateData2, 9);
+	if(write2success){
+		Serial.println("Load 2 success!");
+		delay(100);
+		return true;
+	}
+	else return false;
+}
+
+void BQ27441::displayRegisters()
+{
+	computeBlockChecksum();
+}
+
 /*****************************************************************************
  ********************** Battery Characteristics Functions ********************
  *****************************************************************************/
@@ -176,6 +222,26 @@ uint16_t BQ27441::temperature(temp_measure type)
 		break;
 	}
 	return temp;
+}
+
+const uint8_t Class_IDs[14] = {2, 36, 48, 49, 64, 68, 80, 81, 82, 89, 104, 105, 107, 112};
+const uint8_t dataBlockLen[14] = {6, 9, 5, 5, 4, 11, 80, 14, 41, 30, 4, 10, 3, 2};
+
+void BQ27441::printExtendedData(uint8_t classID)
+{
+	uint8_t read_data[dataBlockLen[classID]] = {0};
+	uint8_t offset = 0x00;
+	readExtendedDataBytes(Class_IDs[classID], offset, read_data, dataBlockLen[classID]);
+
+	Serial.println("----------------------------------------");
+	Serial.printf("BQ27441 Register #%d\r\n", classID);
+	Serial.println("----------------------------------------");
+	Serial.println();
+
+	for(uint8_t offset = 0x00; offset < dataBlockLen[classID]; offset++)
+	{
+		Serial.printf("Offset %0X : Data %0X \r\n", offset, read_data[offset]);
+	}
 }
 
 /*****************************************************************************
@@ -575,6 +641,33 @@ uint8_t BQ27441::readExtendedData(uint8_t classID, uint8_t offset)
 	if (!_userConfigControl) exitConfig();
 	
 	return retData;
+}
+
+// Read a byte from extended data specifying a class ID and position offset
+void BQ27441::readExtendedDataBytes(uint8_t classID, uint8_t offset, uint8_t * data, uint8_t size)
+{
+	if (!_userConfigControl) enterConfig(false);
+		
+	if (!blockDataControl()) // // enable block data memory control
+		return; // Return false if enable fails
+	if (!blockDataClass(classID)) // Write class ID using DataBlockClass()
+		return;
+	
+	blockDataOffset(offset / 32); // Write 32-bit block offset (usually 0)
+	
+	computeBlockChecksum(); // Compute checksum going in
+	uint8_t oldCsum = blockDataChecksum();
+	/*for (int i=0; i<32; i++)
+		Serial.print(String(readBlockData(i)) + " ");*/
+		for(uint8_t i = 0; i < size; i++){
+	data[i] = readBlockData((offset + i) % 32); // Read from offset (limit to 0-31)
+		}
+	
+	if (!_userConfigControl) exitConfig();
+	
+	delay(2000);
+
+	return;
 }
 
 // Write a specified number of bytes to extended data specifying a 
